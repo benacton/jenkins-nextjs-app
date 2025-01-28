@@ -10,17 +10,26 @@ pipeline {
         SSH_USER = credentials('SSH_USER_CREDENTIAL')
         APP_DIR = credentials('APP_DIR_CREDENTIAL')
         NODE_ENV = 'production'
+        
+        // Set npm cache directory to workspace
+        NPM_CONFIG_CACHE = "${WORKSPACE}/.npm"
     }
     
     stages {
-        stage('Print Variables') {
+        stage('Setup Environment') {
             steps {
-                // Print environment variables (sensitive data will be masked)
+                // Create necessary directories and set permissions
                 sh '''
-                    echo "EC2 IP Address: $EC2_IP"
-                    echo "SSH Username: $SSH_USER"
-                    echo "Application Directory: $APP_DIR"
-                    echo "Node Environment: $NODE_ENV"
+                    mkdir -p ${NPM_CONFIG_CACHE}
+                    chmod -R 777 ${NPM_CONFIG_CACHE}
+                    
+                    # Print environment information
+                    echo "Node Version:"
+                    node --version
+                    echo "NPM Version:"
+                    npm --version
+                    echo "NPM Cache Directory:"
+                    echo $NPM_CONFIG_CACHE
                 '''
             }
         }
@@ -40,25 +49,45 @@ pipeline {
             steps {
                 // Install project dependencies including Tailwind CSS
                 sh '''
-                    # Print Node and npm versions
-                    node --version
-                    npm --version
+                    # Create a local npmrc file
+                    echo "cache=${NPM_CONFIG_CACHE}" > .npmrc
                     
-                    # Install dependencies
-                    npm install
+                    # Install dependencies with specific environment settings
+                    npm ci || npm install
                     
-                    # Install Tailwind CSS and its peer dependencies
-                    npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
+                    # Install Tailwind and its dependencies explicitly
+                    npm install --save-dev tailwindcss@latest postcss@latest autoprefixer@latest
                     
-                    # Initialize Tailwind CSS if config doesn't exist
-                    if [ ! -f tailwind.config.js ]; then
-                        npx tailwindcss init -p
-                    fi
+                    # Create Tailwind config manually instead of using npx
+                    cat << EOF > tailwind.config.js
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  content: [
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
+    './app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+EOF
+
+                    # Create PostCSS config manually
+                    cat << EOF > postcss.config.js
+module.exports = {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+EOF
+
+                    # Verify configs were created
+                    ls -la tailwind.config.js postcss.config.js
                     
                     # List installed packages for verification
-                    npm list tailwindcss
-                    npm list postcss
-                    npm list autoprefixer
+                    npm list tailwindcss postcss autoprefixer
                 '''
             }
         }
@@ -92,6 +121,7 @@ pipeline {
                 unset EC2_IP
                 unset SSH_USER
                 unset APP_DIR
+                rm -f .npmrc
             '''
         }
     }
