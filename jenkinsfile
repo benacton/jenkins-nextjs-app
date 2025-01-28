@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Node version specification
+        NODE_VERSION = '20.x'
+        
+        // Required credentials
+        EC2_IP = credentials('EC2_IP_CREDENTIAL')
+        SSH_USER = credentials('SSH_USER_CREDENTIAL')
+        APP_DIR = credentials('APP_DIR_CREDENTIAL')
+        NODE_ENV = 'production'
+    }
+    
+    stages {
+        stage('Print Variables') {
+            steps {
+                // Print environment variables (sensitive data will be masked)
+                sh '''
+                    echo "EC2 IP Address: $EC2_IP"
+                    echo "SSH Username: $SSH_USER"
+                    echo "Application Directory: $APP_DIR"
+                    echo "Node Environment: $NODE_ENV"
+                '''
+            }
+        }
+
+        stage('Checkout') {
+            steps {
+                // Clean workspace before checkout
+                cleanWs()
+                
+                // Checkout code from GitHub
+                git branch: 'main',
+                    url: 'https://github.com/benacton/jenkins-nextjs-app.git'
+            }
+        }
+        
+        stage('Install Dependencies') {
+            steps {
+                // Install project dependencies
+                sh '''
+                    # Print Node and npm versions
+                    node --version
+                    npm --version
+                    
+                    # Install dependencies
+                    npm install
+                '''
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                // Set NODE_ENV for the build
+                withEnv(["NODE_ENV=${NODE_ENV}"]) {
+                    sh '''
+                        # Build the Next.js application
+                        npm run build
+                        
+                        # List build output directory to verify
+                        ls -la .next
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'Build successful!'
+        }
+        failure {
+            echo 'Build failed!'
+        }
+        always {
+            // Clean up sensitive information
+            sh '''
+                unset EC2_IP
+                unset SSH_USER
+                unset APP_DIR
+            '''
+        }
+    }
+}
