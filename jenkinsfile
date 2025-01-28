@@ -38,7 +38,7 @@ pipeline {
         
         stage('Install Dependencies') {
             steps {
-                // Install project dependencies
+                // Install project dependencies including Tailwind CSS
                 sh '''
                     # Print Node and npm versions
                     node --version
@@ -46,6 +46,19 @@ pipeline {
                     
                     # Install dependencies
                     npm install
+                    
+                    # Install Tailwind CSS and its peer dependencies
+                    npm install -D tailwindcss@latest postcss@latest autoprefixer@latest
+                    
+                    # Initialize Tailwind CSS if config doesn't exist
+                    if [ ! -f tailwind.config.js ]; then
+                        npx tailwindcss init -p
+                    fi
+                    
+                    # List installed packages for verification
+                    npm list tailwindcss
+                    npm list postcss
+                    npm list autoprefixer
                 '''
             }
         }
